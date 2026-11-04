@@ -3,7 +3,7 @@
     "path": "~/GitHub/Projet_methode_de_scoring/Script.R",
     "project_path": "Script.R",
     "type": "r_source",
-    "hash": "1570889739",
+    "hash": "1367472279",
     "contents": "",
     "dirty": false,
     "created": 1793808932673.0,
@@ -13,15 +13,15 @@
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "2,38",
+        "cursorPosition": "4,38",
         "scrollLine": "0"
     },
     "folds": "",
-    "lastKnownWriteTime": 1793810304,
+    "lastKnownWriteTime": 1793811507,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1793810304739,
+    "last_content_update": 1793811507901,
     "read_only": false,
     "read_only_alternatives": []
 }
