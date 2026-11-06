@@ -1,0 +1,17 @@
+---
+title: "Projet_scoring_script"
+output: pdf_document
+date: "2026-11-06"
+---
+
+#Installation des library
+```{r}
+library(readr)
+```
+
+#Importation du dataset
+```{r}
+data <- read.csv("Customer Churn.csv")
+```
+
+
