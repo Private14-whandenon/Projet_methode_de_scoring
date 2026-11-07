@@ -4,14 +4,70 @@ output: pdf_document
 date: "2026-11-06"
 ---
 
-#Installation des library
+#Installation des packages
 ```{r}
 library(readr)
+library(tidyverse)
+library(dplyr)
+library(stringr)
 ```
 
 #Importation du dataset
 ```{r}
 data <- read.csv("Customer Churn.csv")
 ```
+
+#Préparation et nettoyage des données
+```{r}
+head(data)
+str(data)
+
+# valeurs manquantes
+colSums(is.na(data))
+
+#Traitement des doublons
+nb_doublons <- sum(duplicated(data))
+print(paste("Nombre de doublons trouvés :",nb_doublons))
+
+# on supprime les doublons (j'avais trouvé 300 doublons):
+data_new <- data %>% distinct()
+
+
+# On renomme les colonnes:
+data_new <- data_new %>%
+rename_with(~ str_replace_all(., "\\s+", "_"))
+
+# On convertit les variables catégorielles (binaires ou groupes) en facteurs
+data_new <- data_new %>%
+mutate(
+across(any_of(c("Churn", "Complains", "Status", "Tariff_Plan", "Age_Group")), as.factor)
+)
+
+# Vérification
+str(data_new)
+
+#Dataset propre
+#write_csv(data, "nw_data.csv")
+#print("Nettoyage terminé ! Le fichier 'nw_data.csv' est prêt.")
+#nw_data <- read_csv("nw_data.csv") 
+
+view(data_new)
+
+```
+
+#Exploration des données (EDA)
+```{r}
+# Statistiques descriptives
+summary(data_new)
+
+
+
+
+```
+
+
+
+
+
 
 
