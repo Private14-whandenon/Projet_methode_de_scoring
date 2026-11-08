@@ -10,21 +10,22 @@ library(readr)
 library(tidyverse)
 library(dplyr)
 library(stringr)
+library(ggplot2)
 ```
 
 #Importation du dataset
 ```{r}
 data <- read.csv("Customer Churn.csv")
-```
 
-#Préparation et nettoyage des données
-```{r}
 #Aperçu des premières lignes
 head(data)
 
 #Aperçu des informations du dataset (nb de variables et d'observations, noms et types de variables)
 str(data)
+```
 
+#Préparation et nettoyage des données
+```{r}
 #Traitement des valeurs manquantes
 nb_miss_value <- sum(is.na(data))
 print(paste("Nombre de valeurs manquantes trouvées :",nb_miss_value))
@@ -50,21 +51,64 @@ across(any_of(c("Churn", "Complains", "Status", "Tariff.Plan")), as.factor),
 Age.Group=factor(Age.Group, levels = 1:5, ordered=TRUE), 
 Charge..Amount = factor(Charge..Amount, levels = 0:10, ordered = TRUE)
 )
-# Vérification
+#Vérification
 str(data_new)
 
 #Traitement des valeurs aberrantes
 ##Détection des valeurs abérrantes (graphiquement)
 boxplot(select(data_new, where(is.numeric)))
-
 ```
 
 #Exploration des données (EDA)
+##Analyse des variables quantitatives
 ```{r}
-# Statistiques descriptives
-summary(data_new)
+#Sélection des variables 
+numeric_vars <- names(select(data_new, where(is.numeric)))
 
+#Statistiques descriptives des variables
+summary(data_new[numeric_vars])
 
+#Boxplot, histogramme et QQ-plot des variables
+for(i in numeric_vars) {
+  boxplot(data_new[[i]], main=paste("boxplot de", i))
+  
+  hist(data_new[[i]], probability = TRUE, main= paste("Histogramme et de densité de", i), xlab = i)
+  lines(density(data_new[[i]], na.rm = TRUE), col = "red", lwd = 2)
+  
+  qqnorm(data_new[[i]], main = paste("QQ_plot de",i), col = "lightblue")
+  qqline(data_new[[i]], lwd=2)
+}
+```
+##Analyse des variables catégorielles
+```{r}
+#Selection de variables catégorielles 
+categories_var <- names(select(data_new, where(is.factor)))
+
+#Tableaux des fréquences et diagrammes des variables catégorielles 
+for (x in categories_var) { 
+  counts <- table(data_new[x])
+  
+  #Tableaux de fréquence
+  props <- prop.table(counts)*100
+  print(props)
+  
+  #Diagrammes
+  bp <- barplot(counts, 
+          main=paste("Diagramme de",x), 
+          xlab = x, 
+          ylab = "Effectifs",
+          col = "lightblue",
+          ylim= c(0, max(counts)*1.5))
+  
+  #Faire apparaître l'effectif et la fréquence de chaque variable au niveau de la barre
+  labels_texte <- paste0(counts, " \n(", round(props, 1), "%)")
+  text(x = bp, 
+       y = counts, 
+       labels = labels_texte, 
+       pos = 3,      # Positionne le texte juste au-dessus du sommet de la barre
+       cex = 0.85,   # Taille de la police (légèrement réduite pour que ça tienne bien)
+       col = "darkblue")
+}
 ```
 
 

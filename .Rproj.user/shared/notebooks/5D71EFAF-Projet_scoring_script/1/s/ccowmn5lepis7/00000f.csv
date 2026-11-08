@@ -1,1 +1,4 @@
 "0","data <- read.csv(""Customer Churn.csv"")"
+"0",""
+"0","#Aperçu des premières lignes"
+"0","head(data)"
