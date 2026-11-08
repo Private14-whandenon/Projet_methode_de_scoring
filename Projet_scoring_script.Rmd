@@ -11,6 +11,10 @@ library(tidyverse)
 library(dplyr)
 library(stringr)
 library(ggplot2)
+library(cluster)    
+library(factoextra) 
+library(dendextend) 
+library(MASS)
 ```
 
 #Importation du dataset
@@ -110,7 +114,18 @@ for (x in categories_var) {
        col = "darkblue")
 }
 ```
+#K-means & CAH  
+```{r}
+#Notre base de données contient des variables quantitatives et qualitatives, alors que ces algorithmes ne s'utilisent que sur des variables quantitatives. 
+#Conclusion : Nous ne pourrons pas utiliser ces algorithmes dans notre cas.  
+```
 
+#Feature Engineering & feature selection 
+##Feature engineering (analyse bivariée des variables)
+###Variables quantitatives
+```{r}
+
+```
 
 
 
