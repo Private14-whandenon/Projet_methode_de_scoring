@@ -5,8 +5,8 @@ rm(list = ls())
 library(corrplot)
 
 # Lecture des donnees (mettre le fichier dans le dossier de travail)
-chemin = "C:/Users/mound/Downloads/Customer Churn.csv"
-data <- read.csv(chemin, header = TRUE)
+
+data <- read.csv("Customer Churn.csv")
 names(data) <- gsub("\\.+", ".", names(data))   # certains noms ont des doubles espaces
 
 # Apercu de la base
