@@ -7,6 +7,7 @@ date: "2026-11-06"
 #Installation des packages
 ```{r}
 library(readr)
+library(MASS)
 library(tidyverse)
 library(dplyr)
 library(stringr)
@@ -14,7 +15,6 @@ library(ggplot2)
 library(cluster)    
 library(factoextra) 
 library(dendextend) 
-library(MASS)
 ```
 
 #Importation du dataset
@@ -60,14 +60,14 @@ str(data_new)
 
 #Traitement des valeurs aberrantes
 ##Détection des valeurs abérrantes (graphiquement)
-boxplot(select(data_new, where(is.numeric)))
+boxplot(dplyr::select(data_new, where(is.numeric)))
 ```
 
 #Exploration des données (EDA)
 ##Analyse des variables quantitatives
 ```{r}
 #Sélection des variables 
-numeric_vars <- names(select(data_new, where(is.numeric)))
+numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))
 
 #Statistiques descriptives des variables
 summary(data_new[numeric_vars])
@@ -86,7 +86,7 @@ for(i in numeric_vars) {
 ##Analyse des variables catégorielles
 ```{r}
 #Selection de variables catégorielles 
-categories_var <- names(select(data_new, where(is.factor)))
+categories_var <- names(dplyr::select(data_new, where(is.factor)))
 
 #Tableaux des fréquences et diagrammes des variables catégorielles 
 for (x in categories_var) { 
@@ -322,8 +322,172 @@ vars_forward
 
 
 ```
+# Partie Modélisation 
+
+## Données utilisées 
+```{r, echo=TRUE}
+# On utilise les variables retenues par la sélection LDA Backward
+
+formule_modele <- as.formula(paste("Churn ~", paste(vars_finales, collapse = " + ")))
+
+# On réduit les bases de données à ces variables pour alléger les modèles
+train_final <- train_data[, c(vars_finales, "Churn")]
+test_final  <- test_data[, c(vars_finales, "Churn")]
+
+```
 
 
+##  KNN (K-Nearest Neighbors)
+```{r, echo=TRUE}
+library(class) 
 
+# Normalisation (indispensable pour KNN)
+train_scaled <- scale(train_final[, vars_finales])
+test_scaled  <- scale(test_final[, vars_finales], 
+                      center = attr(train_scaled, "scaled:center"), 
+                      scale = attr(train_scaled, "scaled:scale"))
 
+# Application du KNN (k=5)
+set.seed(123)
+pred_knn <- knn(train = train_scaled, test = test_scaled, cl = train_final$Churn, k = 5)
+
+# Matrice de confusion et Précision
+table(Predit = pred_knn, Reel = test_final$Churn)
+accuracy_KNN <- mean(pred_knn == test_final$Churn)
+print(paste("Précision du KNN :", round(accuracy_KNN, 4)))
+
+```
+
+## CART (Classification and Regression Tree)
+```{r, echo=TRUE}
+library(rpart)     
+library(rpart.plot)
+
+# Arbre initial
+model.cart <- rpart(formule_modele, data = train_final)
+
+# Elagage (recherche du meilleur cp)
+cv.cart <- train(formule_modele, data = train_final, method = "rpart",
+                 metric = "Accuracy",
+                 trControl = trainControl(method = "cv", number = 10),
+                 tuneGrid = data.frame(cp = seq(0.01, 0.1, length = 20)))
+
+# Elagage avec le meilleur cp
+model.cart_pruned <- prune(model.cart, cp = as.numeric(cv.cart$best))
+rpart.plot(model.cart_pruned)
+
+# Prédiction
+pred.cart <- predict(model.cart_pruned, test_final, type = "class")
+err_cart <- mean(pred.cart != test_final$Churn)
+cat(sprintf("[CART] Taux d'erreur = %.4f\n", err_cart))
+
+```
+
+## C50
+```{r, echo=TRUE}
+library(C50)
+
+model_c5 <- C5.0(formule_modele, data = train_final)
+
+pred_c5 <- predict(model_c5, newdata = test_final)
+err_c5  <- mean(pred_c5 != test_final$Churn)
+cat(sprintf("[C5.0] Taux d'erreur = %.4f\n", err_c5))
+
+```
+
+## CHAID
+```{r, echo=TRUE}
+
+library(chaidr)
+library(partykit)
+
+# Contrôle des paramètres
+ctrl_chaid <- chaid_control(alpha_split = 0.05, alpha_merge = 0.05, 
+                            min_parent = 100, min_child = 50, max_depth = 3)
+
+# Modèle
+model_chaid <- chaid(formule_modele, data = train_final, control = ctrl_chaid)
+
+# Plot (affichage de l'arbre)
+plot(model_chaid, 
+     inner_panel = node_inner(model_chaid, id = TRUE),
+     terminal_panel = node_barplot(model_chaid, beside = FALSE, id = FALSE),
+     gp = gpar(fontsize = 9))
+
+# Prédiction
+pred_chaid <- predict(model_chaid, newdata = test_final, type = "response")
+err_chaid  <- mean(pred_chaid != test_final$Churn)
+cat(sprintf("[CHAID] Taux d'erreur = %.4f\n", err_chaid))
+```
+
+## Forêt Aléatoire (Random Forest)
+```{r, echo=TRUE}
+# Entraînement
+rf_model <- randomForest(formule_modele, data = train_final, ntree = 100)
+
+# Prédiction
+rf_predictions <- predict(rf_model, test_final)
+
+# Matrice de confusion
+conf_matrix_rf <- confusionMatrix(rf_predictions, test_final$Churn)
+error_rate_rf <- 1 - conf_matrix_rf$overall["Accuracy"]
+
+print(paste("Taux d'erreur Random Forest :", round(error_rate_rf, 4)))
+
+```
+## Boosting (GBM )
+```{r, echo=TRUE}
+library(caret)
+set.seed(123)
+ctrl_gbm <- trainControl(method = "cv", number = 5)
+model_gbm <- train(formule_modele, data = train_final, method = "gbm", 
+                   trControl = ctrl_gbm, verbose = FALSE)
+
+pred_gbm <- predict(model_gbm, test_final)
+err_gbm <- mean(pred_gbm != test_final$Churn)
+cat(sprintf("[Boosting GBM] Taux d'erreur = %.4f\n", err_gbm))
+
+```
+## Régression Logistique
+```{r, echo=TRUE}
+model_glm <- glm(formule_modele, data = train_final, family = "binomial")
+
+# Prédiction (probabilité, puis classe avec seuil 0.5)
+prob_glm <- predict(model_glm, test_final, type = "response")
+pred_glm <- ifelse(prob_glm > 0.5, "oui", "non") 
+pred_glm <- as.factor(pred_glm)
+
+err_glm <- mean(pred_glm != test_final$Churn)
+cat(sprintf("[Régression Logistique] Taux d'erreur = %.4f\n", err_glm))
+
+```
+## Analyse Discriminante (LDA)
+```{r, echo=TRUE}
+lda_model <- lda(formule_modele, data = train_final)
+
+pred_lda <- predict(lda_model, newdata = test_final)$class
+err_lda  <- mean(pred_lda != test_final$Churn)
+cat(sprintf("[LDA] Taux d'erreur = %.4f\n", err_lda))
+
+```
+
+# Comparaison des modèles 
+```{r, echo=TRUE}
+# On rassemble les taux d'erreur
+
+resultats <- data.frame(
+  Algorithme = c("KNN", "CART", "C5.0", "CHAID", "Random Forest", "Boosting", "Logistique", "LDA"),
+  Taux_Erreur = c(1 - accuracy_KNN, err_cart, err_c5, err_chaid, error_rate_rf, err_gbm, err_glm, err_lda)
+)
+
+# on ressort le meilleur (erreur la plus basse)
+resultats <- resultats[order(resultats$Taux_Erreur), ]
+print(resultats)
+
+# Graphique comparatif 
+barplot(resultats$Taux_Erreur, names.arg = resultats$Algorithme, 
+        col = "skyblue", main = "Comparaison des taux d'erreur", 
+        ylab = "Taux d'erreur", las = 2)
+
+```
 
