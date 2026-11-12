@@ -3,7 +3,7 @@
     "path": "~/GitHub/Projet_methode_de_scoring/Projet_scoring_script.Rmd",
     "project_path": "Projet_scoring_script.Rmd",
     "type": "r_markdown",
-    "hash": "2727374458",
+    "hash": "3686100885",
     "contents": "",
     "dirty": false,
     "created": 1793974828354.0,
@@ -17,11 +17,11 @@
         "scrollLine": "113"
     },
     "folds": "",
-    "lastKnownWriteTime": 1794152818,
+    "lastKnownWriteTime": 1794224405,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1794152818751,
+    "last_content_update": 1794303698157,
     "read_only": false,
     "read_only_alternatives": []
 }
