@@ -1,0 +1,3 @@
+"0",""
+"0","#Commentaire: La correlation de spearman est plus robuste étant donné que nos variables ne suivent pas une distribution normale (cf histogramme et qq_plot) et qu'il y a des valeurs extrêmes. "
+"0",""

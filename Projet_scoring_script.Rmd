@@ -6,6 +6,8 @@ date: "2026-11-06"
 
 #Installation des packages
 ```{r}
+#install.packages("vcd") # Pour le V de Cramér
+
 library(readr)
 library(MASS)
 library(tidyverse)
@@ -15,6 +17,11 @@ library(ggplot2)
 library(cluster)    
 library(factoextra) 
 library(dendextend) 
+library(corrplot)
+library(caret)
+library(klaR)
+library(randomForest)
+library(vcd)
 ```
 
 #Importation du dataset
@@ -30,6 +37,8 @@ str(data)
 
 #Préparation et nettoyage des données
 ```{r}
+#rm(list = ls())
+
 #Traitement des valeurs manquantes
 nb_miss_value <- sum(is.na(data))
 print(paste("Nombre de valeurs manquantes trouvées :",nb_miss_value))
@@ -86,10 +95,10 @@ for(i in numeric_vars) {
 ##Analyse des variables catégorielles
 ```{r}
 #Selection de variables catégorielles 
-categories_var <- names(dplyr::select(data_new, where(is.factor)))
+categories_vars <- names(dplyr::select(data_new, where(is.factor)))
 
 #Tableaux des fréquences et diagrammes des variables catégorielles 
-for (x in categories_var) { 
+for (x in categories_vars) { 
   counts <- table(data_new[x])
   
   #Tableaux de fréquence
@@ -114,78 +123,94 @@ for (x in categories_var) {
        col = "darkblue")
 }
 ```
-#K-means & CAH  
-```{r}
-#Notre base de données contient des variables quantitatives et qualitatives, alors que ces algorithmes ne s'utilisent que sur des variables quantitatives. 
-#Conclusion : Nous ne pourrons pas utiliser ces algorithmes dans notre cas.  
-```
 
 #Feature Engineering & feature selection 
+
 ##Feature engineering (analyse bivariée des variables)
-###Variables quantitatives
+
+###Variables quantitatives (correlations entre variables)
 ```{r}
+numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))
+
+#Boxplots des moyennes des variables quantitatives en fonction du churn
+aggregate(data_new[, numeric_vars], list(Churn = data_new$Churn), mean)
+par(mfrow = c(2, 4))
+for (v in numeric_vars) boxplot(data_new[[v]] ~ data_new$Churn, main = v, xlab = "", ylab = "")
+par(mfrow = c(1, 1))
+
+# Correlation des varaibles quantitatives
+df_num <- data_new[, numeric_vars]
+
+mat_pearson  <- cor(df_num, method = "pearson", use = "complete.obs")
+mat_spearman <- cor(df_num, method = "spearman", use = "complete.obs")
+
+corrplot(mat_pearson, method = "color", type = "upper", addCoef.col = "black", number.cex = 0.6, title = "Heatmap de corrélation (pearson)", mar = c(0,0,1,0))
+corrplot(mat_spearman, method = "color", type = "upper", addCoef.col = "black", number.cex = 0.6, title = "Heatmap de corrélation (spearman)", mar = c(0,0,1,0))
+
+#Commentaire: La correlation de spearman est plus robuste étant donné que nos variables ne suivent pas une distribution normale (cf histogramme et qq_plot) et qu'il y a des valeurs extrêmes. 
 
 ```
 
 
-### traitement des données 
+### Variables qualitatives (liaisons entre variables)
 ```{r}
-# Etape 1 : description de la base
+categories_vars <- names(dplyr::select(data_new, where(is.factor)))
 
-rm(list = ls())
-library(corrplot)
+#Créez une matrice vide carrée (N x N)
+n <- length(categories_vars)
+mat_cramer <- matrix(0, nrow = n, ncol = n, dimnames = list(categories_vars, categories_vars))
 
-# Lecture des donnees (mettre le fichier dans le dossier de travail)
-data <- read.csv("Customer Churn.csv")
-names(data) <- gsub("\\.+", ".", names(data))   # certains noms ont des doubles espaces
+#Remplir la matrice avec le V de Cramér pour chaque paire
+for (i in 1:n) {
+  for (j in 1:n) {
+    if (i == j) {
+      mat_cramer[i, j] <- 1.0 # Une variable associée à elle-même a un V de 1
+    } else {
+      tab <- table(data_new[[categories_vars[i]]], data_new[[categories_vars[j]]])
+      mat_cramer[i, j] <- assocstats(tab)$cramer
+    }
+  }
+}
 
-# Apercu de la base
-dim(data)
-str(data)
-summary(data)
+# 4. Affichage sous forme de heatmap avec corrplot
+corrplot(mat_cramer, 
+         method = "color",          
+         type = "upper",           
+         addCoef.col = "black",  
+         number.cex = 0.7,         
+         tl.col = "black",          
+         tl.srt = 45,             
+         title = "Matrice du V de Cramér (liaisons entre qualitatives)",
+         mar = c(0, 0, 2, 0))
+```
+###L'encodage des variables
+```{r}
+#L'encodage se fera uniquement sur les variables catégorielles binaires. Les variable catégorielles ordinales seront reconverties en numériques, uniquement pour les algorithmes KNN, K-means et CAH. 
 
-# Valeurs manquantes et doublons
-colSums(is.na(data))
-sum(duplicated(data))
-data <- data[!duplicated(data), ]   # Suppression des doublons( une ligne = un client)
-dim(data)
+numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))
 
-# Variable cible
-data$Churn <- factor(data$Churn, levels = c(0, 1), labels = c("non", "oui")) # transforme churn en deux modalité
-# (oui et non ) ; important pour le randomforest
-table(data$Churn)
-prop.table(table(data$Churn))
-barplot(table(data$Churn), main = "Repartition du churn")
+cat_ordinal_vars <- c("Charge..Amount", "Age.Group")
+data_new[cat_ordinal_vars] <- lapply(data_new[cat_ordinal_vars], function(x) as.numeric(as.character(x)))
 
-# Variables quantitatives selon le churn
-vars <- c("Call.Failure", "Subscription.Length", "Seconds.of.Use", "Frequency.of.use",
-          "Frequency.of.SMS", "Distinct.Called.Numbers", "Age", "Customer.Value")
-aggregate(data[, vars], list(Churn = data$Churn), mean)
+df_nominales <- data_new[, c("Complains", "Tariff.Plan", "Status")]
 
-par(mfrow = c(2, 4))
-for (v in vars) boxplot(data[[v]] ~ data$Churn, main = v, xlab = "", ylab = "")
-par(mfrow = c(1, 1))
+#Appliquer le One-Hot Encoding
+mat_onehot <- model.matrix(~ . - 1, data = df_nominales)
+# 3. Regrouper avec tes quantitatives et tes ordinales déjà numériques
+df_global <- cbind(
+  data_new[, c(numeric_vars, cat_ordinal_vars)], # Quantitatives + Ordinales numériques
+  mat_onehot                               # Nominales encodées en 0/1
+)
 
-# Variables qualitatives : taux de churn par modalite
-
-
-prop.table(table(data$Complains, data$Churn), 1)
-prop.table(table(data$Tariff.Plan, data$Churn), 1)
-prop.table(table(data$Status, data$Churn), 1)
-prop.table(table(data$Charge.Amount, data$Churn), 1)
-prop.table(table(data$Age.Group, data$Churn), 1)
-
-table(data$Charge.Amount)
-table(data$Age.Group)
-
-# Correlations
-corrplot(cor(data[, names(data) != "Churn"]), method = "number", type = "upper", number.cex = 0.6)
+str(df_global)
 ```
 
 
 ####  K-means et CAH 
 
 ```{r}
+#Necessite l'encodage des variables qualitatives (binaires, les )
+
 # Etape 2 : k-means et CAH 
 
 library(cluster)
@@ -270,10 +295,7 @@ prop.table(table(km.mixte$cluster, data$Churn), 1)
 #### Séparation Train/Test et selection de variable par LDA
 
 ```{r}
-library(caret)
-library(MASS)
-library(klaR)
-library(randomForest)
+###Après la sélection de données à ce stade faire l'encodage des vars qual uniquement pour le KNN. Les autres algorithmes n'en ont pas besoin car leur configuration permet de traiter les données qualitatives sans l'encodage. 
 
 ####### Separation train / test (70 % / 30 %) #######
 set.seed(123)

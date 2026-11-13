@@ -1,0 +1,5 @@
+"0",""
+"0","# Variables quantitatives selon le churn"
+"0","vars <- c(""Call.Failure"", ""Subscription.Length"", ""Seconds.of.Use"", ""Frequency.of.use"","
+"0","          ""Frequency.of.SMS"", ""Distinct.Called.Numbers"", ""Age"", ""Customer.Value"")"
+"0","aggregate(data[, vars], list(Churn = data$Churn), mean)"

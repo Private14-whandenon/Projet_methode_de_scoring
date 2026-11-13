@@ -6,7 +6,10 @@ date: "2026-11-06"
 
 #Installation des packages
 ```{r}
+#install.packages("vcd") # Pour le V de Cramér
+
 library(readr)
+library(MASS)
 library(tidyverse)
 library(dplyr)
 library(stringr)
@@ -14,7 +17,11 @@ library(ggplot2)
 library(cluster)    
 library(factoextra) 
 library(dendextend) 
-library(MASS)
+library(corrplot)
+library(caret)
+library(klaR)
+library(randomForest)
+library(vcd)
 ```
 
 #Importation du dataset
@@ -30,6 +37,8 @@ str(data)
 
 #Préparation et nettoyage des données
 ```{r}
+#rm(list = ls())
+
 #Traitement des valeurs manquantes
 nb_miss_value <- sum(is.na(data))
 print(paste("Nombre de valeurs manquantes trouvées :",nb_miss_value))
@@ -60,14 +69,14 @@ str(data_new)
 
 #Traitement des valeurs aberrantes
 ##Détection des valeurs abérrantes (graphiquement)
-boxplot(select(data_new, where(is.numeric)))
+boxplot(dplyr::select(data_new, where(is.numeric)))
 ```
 
 #Exploration des données (EDA)
 ##Analyse des variables quantitatives
 ```{r}
 #Sélection des variables 
-numeric_vars <- names(select(data_new, where(is.numeric)))
+numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))
 
 #Statistiques descriptives des variables
 summary(data_new[numeric_vars])
@@ -86,10 +95,10 @@ for(i in numeric_vars) {
 ##Analyse des variables catégorielles
 ```{r}
 #Selection de variables catégorielles 
-categories_var <- names(select(data_new, where(is.factor)))
+categories_vars <- names(dplyr::select(data_new, where(is.factor)))
 
 #Tableaux des fréquences et diagrammes des variables catégorielles 
-for (x in categories_var) { 
+for (x in categories_vars) { 
   counts <- table(data_new[x])
   
   #Tableaux de fréquence
@@ -114,78 +123,94 @@ for (x in categories_var) {
        col = "darkblue")
 }
 ```
-#K-means & CAH  
-```{r}
-#Notre base de données contient des variables quantitatives et qualitatives, alors que ces algorithmes ne s'utilisent que sur des variables quantitatives. 
-#Conclusion : Nous ne pourrons pas utiliser ces algorithmes dans notre cas.  
-```
 
 #Feature Engineering & feature selection 
+
 ##Feature engineering (analyse bivariée des variables)
-###Variables quantitatives
+
+###Variables quantitatives (correlations entre variables)
 ```{r}
+numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))
+
+#Boxplots des moyennes des variables quantitatives en fonction du churn
+aggregate(data_new[, numeric_vars], list(Churn = data_new$Churn), mean)
+par(mfrow = c(2, 4))
+for (v in numeric_vars) boxplot(data_new[[v]] ~ data_new$Churn, main = v, xlab = "", ylab = "")
+par(mfrow = c(1, 1))
+
+# Correlation des varaibles quantitatives
+df_num <- data_new[, numeric_vars]
+
+mat_pearson  <- cor(df_num, method = "pearson", use = "complete.obs")
+mat_spearman <- cor(df_num, method = "spearman", use = "complete.obs")
+
+corrplot(mat_pearson, method = "color", type = "upper", addCoef.col = "black", number.cex = 0.6, title = "Heatmap de corrélation (pearson)", mar = c(0,0,1,0))
+corrplot(mat_spearman, method = "color", type = "upper", addCoef.col = "black", number.cex = 0.6, title = "Heatmap de corrélation (spearman)", mar = c(0,0,1,0))
+
+#Commentaire: La correlation de spearman est plus robuste étant donné que nos variables ne suivent pas une distribution normale (cf histogramme et qq_plot) et qu'il y a des valeurs extrêmes. 
 
 ```
 
 
-### traitement des données 
+### Variables qualitatives (liaisons entre variables)
 ```{r}
-# Etape 1 : description de la base
+categories_vars <- names(dplyr::select(data_new, where(is.factor)))
 
-rm(list = ls())
-library(corrplot)
+#Créez une matrice vide carrée (N x N)
+n <- length(categories_vars)
+mat_cramer <- matrix(0, nrow = n, ncol = n, dimnames = list(categories_vars, categories_vars))
 
-# Lecture des donnees (mettre le fichier dans le dossier de travail)
-data <- read.csv("Customer Churn.csv")
-names(data) <- gsub("\\.+", ".", names(data))   # certains noms ont des doubles espaces
+#Remplir la matrice avec le V de Cramér pour chaque paire
+for (i in 1:n) {
+  for (j in 1:n) {
+    if (i == j) {
+      mat_cramer[i, j] <- 1.0 # Une variable associée à elle-même a un V de 1
+    } else {
+      tab <- table(data_new[[categories_vars[i]]], data_new[[categories_vars[j]]])
+      mat_cramer[i, j] <- assocstats(tab)$cramer
+    }
+  }
+}
 
-# Apercu de la base
-dim(data)
-str(data)
-summary(data)
+# 4. Affichage sous forme de heatmap avec corrplot
+corrplot(mat_cramer, 
+         method = "color",          
+         type = "upper",           
+         addCoef.col = "black",  
+         number.cex = 0.7,         
+         tl.col = "black",          
+         tl.srt = 45,             
+         title = "Matrice du V de Cramér (liaisons entre qualitatives)",
+         mar = c(0, 0, 2, 0))
+```
+###L'encodage des variables
+```{r}
+#L'encodage se fera uniquement sur les variables catégorielles binaires. Les variable catégorielles ordinales seront reconverties en numériques, uniquement pour les algorithmes KNN, K-means et CAH. 
 
-# Valeurs manquantes et doublons
-colSums(is.na(data))
-sum(duplicated(data))
-data <- data[!duplicated(data), ]   # Suppression des doublons( une ligne = un client)
-dim(data)
+numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))
 
-# Variable cible
-data$Churn <- factor(data$Churn, levels = c(0, 1), labels = c("non", "oui")) # transforme churn en deux modalité
-# (oui et non ) ; important pour le randomforest
-table(data$Churn)
-prop.table(table(data$Churn))
-barplot(table(data$Churn), main = "Repartition du churn")
+cat_ordinal_vars <- c("Charge..Amount", "Age.Group")
+data_new[cat_ordinal_vars] <- lapply(data_new[cat_ordinal_vars], function(x) as.numeric(as.character(x)))
 
-# Variables quantitatives selon le churn
-vars <- c("Call.Failure", "Subscription.Length", "Seconds.of.Use", "Frequency.of.use",
-          "Frequency.of.SMS", "Distinct.Called.Numbers", "Age", "Customer.Value")
-aggregate(data[, vars], list(Churn = data$Churn), mean)
+df_nominales <- data_new[, c("Complains", "Tariff.Plan", "Status")]
 
-par(mfrow = c(2, 4))
-for (v in vars) boxplot(data[[v]] ~ data$Churn, main = v, xlab = "", ylab = "")
-par(mfrow = c(1, 1))
+#Appliquer le One-Hot Encoding
+mat_onehot <- model.matrix(~ . - 1, data = df_nominales)
+# 3. Regrouper avec tes quantitatives et tes ordinales déjà numériques
+df_global <- cbind(
+  data_new[, c(numeric_vars, cat_ordinal_vars)], # Quantitatives + Ordinales numériques
+  mat_onehot                               # Nominales encodées en 0/1
+)
 
-# Variables qualitatives : taux de churn par modalite
-
-
-prop.table(table(data$Complains, data$Churn), 1)
-prop.table(table(data$Tariff.Plan, data$Churn), 1)
-prop.table(table(data$Status, data$Churn), 1)
-prop.table(table(data$Charge.Amount, data$Churn), 1)
-prop.table(table(data$Age.Group, data$Churn), 1)
-
-table(data$Charge.Amount)
-table(data$Age.Group)
-
-# Correlations
-corrplot(cor(data[, names(data) != "Churn"]), method = "number", type = "upper", number.cex = 0.6)
+str(df_global)
 ```
 
 
 ####  K-means et CAH 
 
 ```{r}
+#Necessite l'encodage des variables qualitatives (binaires, les )
+
 # Etape 2 : k-means et CAH 
 
 library(cluster)
@@ -270,10 +295,7 @@ prop.table(table(km.mixte$cluster, data$Churn), 1)
 #### Séparation Train/Test et selection de variable par LDA
 
 ```{r}
-library(caret)
-library(MASS)
-library(klaR)
-library(randomForest)
+###Après la sélection de données à ce stade faire l'encodage des vars qual uniquement pour le KNN. Les autres algorithmes n'en ont pas besoin car leur configuration permet de traiter les données qualitatives sans l'encodage. 
 
 ####### Separation train / test (70 % / 30 %) #######
 set.seed(123)
@@ -322,8 +344,172 @@ vars_forward
 
 
 ```
+# Partie Modélisation 
+
+## Données utilisées 
+```{r, echo=TRUE}
+# On utilise les variables retenues par la sélection LDA Backward
+
+formule_modele <- as.formula(paste("Churn ~", paste(vars_finales, collapse = " + ")))
+
+# On réduit les bases de données à ces variables pour alléger les modèles
+train_final <- train_data[, c(vars_finales, "Churn")]
+test_final  <- test_data[, c(vars_finales, "Churn")]
+
+```
 
 
+##  KNN (K-Nearest Neighbors)
+```{r, echo=TRUE}
+library(class) 
 
+# Normalisation (indispensable pour KNN)
+train_scaled <- scale(train_final[, vars_finales])
+test_scaled  <- scale(test_final[, vars_finales], 
+                      center = attr(train_scaled, "scaled:center"), 
+                      scale = attr(train_scaled, "scaled:scale"))
 
+# Application du KNN (k=5)
+set.seed(123)
+pred_knn <- knn(train = train_scaled, test = test_scaled, cl = train_final$Churn, k = 5)
+
+# Matrice de confusion et Précision
+table(Predit = pred_knn, Reel = test_final$Churn)
+accuracy_KNN <- mean(pred_knn == test_final$Churn)
+print(paste("Précision du KNN :", round(accuracy_KNN, 4)))
+
+```
+
+## CART (Classification and Regression Tree)
+```{r, echo=TRUE}
+library(rpart)     
+library(rpart.plot)
+
+# Arbre initial
+model.cart <- rpart(formule_modele, data = train_final)
+
+# Elagage (recherche du meilleur cp)
+cv.cart <- train(formule_modele, data = train_final, method = "rpart",
+                 metric = "Accuracy",
+                 trControl = trainControl(method = "cv", number = 10),
+                 tuneGrid = data.frame(cp = seq(0.01, 0.1, length = 20)))
+
+# Elagage avec le meilleur cp
+model.cart_pruned <- prune(model.cart, cp = as.numeric(cv.cart$best))
+rpart.plot(model.cart_pruned)
+
+# Prédiction
+pred.cart <- predict(model.cart_pruned, test_final, type = "class")
+err_cart <- mean(pred.cart != test_final$Churn)
+cat(sprintf("[CART] Taux d'erreur = %.4f\n", err_cart))
+
+```
+
+## C50
+```{r, echo=TRUE}
+library(C50)
+
+model_c5 <- C5.0(formule_modele, data = train_final)
+
+pred_c5 <- predict(model_c5, newdata = test_final)
+err_c5  <- mean(pred_c5 != test_final$Churn)
+cat(sprintf("[C5.0] Taux d'erreur = %.4f\n", err_c5))
+
+```
+
+## CHAID
+```{r, echo=TRUE}
+
+library(chaidr)
+library(partykit)
+
+# Contrôle des paramètres
+ctrl_chaid <- chaid_control(alpha_split = 0.05, alpha_merge = 0.05, 
+                            min_parent = 100, min_child = 50, max_depth = 3)
+
+# Modèle
+model_chaid <- chaid(formule_modele, data = train_final, control = ctrl_chaid)
+
+# Plot (affichage de l'arbre)
+plot(model_chaid, 
+     inner_panel = node_inner(model_chaid, id = TRUE),
+     terminal_panel = node_barplot(model_chaid, beside = FALSE, id = FALSE),
+     gp = gpar(fontsize = 9))
+
+# Prédiction
+pred_chaid <- predict(model_chaid, newdata = test_final, type = "response")
+err_chaid  <- mean(pred_chaid != test_final$Churn)
+cat(sprintf("[CHAID] Taux d'erreur = %.4f\n", err_chaid))
+```
+
+## Forêt Aléatoire (Random Forest)
+```{r, echo=TRUE}
+# Entraînement
+rf_model <- randomForest(formule_modele, data = train_final, ntree = 100)
+
+# Prédiction
+rf_predictions <- predict(rf_model, test_final)
+
+# Matrice de confusion
+conf_matrix_rf <- confusionMatrix(rf_predictions, test_final$Churn)
+error_rate_rf <- 1 - conf_matrix_rf$overall["Accuracy"]
+
+print(paste("Taux d'erreur Random Forest :", round(error_rate_rf, 4)))
+
+```
+## Boosting (GBM )
+```{r, echo=TRUE}
+library(caret)
+set.seed(123)
+ctrl_gbm <- trainControl(method = "cv", number = 5)
+model_gbm <- train(formule_modele, data = train_final, method = "gbm", 
+                   trControl = ctrl_gbm, verbose = FALSE)
+
+pred_gbm <- predict(model_gbm, test_final)
+err_gbm <- mean(pred_gbm != test_final$Churn)
+cat(sprintf("[Boosting GBM] Taux d'erreur = %.4f\n", err_gbm))
+
+```
+## Régression Logistique
+```{r, echo=TRUE}
+model_glm <- glm(formule_modele, data = train_final, family = "binomial")
+
+# Prédiction (probabilité, puis classe avec seuil 0.5)
+prob_glm <- predict(model_glm, test_final, type = "response")
+pred_glm <- ifelse(prob_glm > 0.5, "oui", "non") 
+pred_glm <- as.factor(pred_glm)
+
+err_glm <- mean(pred_glm != test_final$Churn)
+cat(sprintf("[Régression Logistique] Taux d'erreur = %.4f\n", err_glm))
+
+```
+## Analyse Discriminante (LDA)
+```{r, echo=TRUE}
+lda_model <- lda(formule_modele, data = train_final)
+
+pred_lda <- predict(lda_model, newdata = test_final)$class
+err_lda  <- mean(pred_lda != test_final$Churn)
+cat(sprintf("[LDA] Taux d'erreur = %.4f\n", err_lda))
+
+```
+
+# Comparaison des modèles 
+```{r, echo=TRUE}
+# On rassemble les taux d'erreur
+
+resultats <- data.frame(
+  Algorithme = c("KNN", "CART", "C5.0", "CHAID", "Random Forest", "Boosting", "Logistique", "LDA"),
+  Taux_Erreur = c(1 - accuracy_KNN, err_cart, err_c5, err_chaid, error_rate_rf, err_gbm, err_glm, err_lda)
+)
+
+# on ressort le meilleur (erreur la plus basse)
+resultats <- resultats[order(resultats$Taux_Erreur), ]
+print(resultats)
+
+# Graphique comparatif 
+barplot(resultats$Taux_Erreur, names.arg = resultats$Algorithme, 
+        col = "skyblue", main = "Comparaison des taux d'erreur", 
+        ylab = "Taux d'erreur", las = 2)
+
+```
 

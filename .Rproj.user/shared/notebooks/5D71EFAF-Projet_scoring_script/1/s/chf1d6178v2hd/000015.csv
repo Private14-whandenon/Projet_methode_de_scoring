@@ -1,0 +1,1 @@
+"0","for (v in vars) boxplot(data[[v]] ~ data$Churn, main = v, xlab = """", ylab = """")"

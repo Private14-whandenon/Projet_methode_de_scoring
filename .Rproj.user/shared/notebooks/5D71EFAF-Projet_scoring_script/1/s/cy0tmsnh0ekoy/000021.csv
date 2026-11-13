@@ -1,0 +1,4 @@
+"0",""
+"0","# Methode de Ward"
+"0","hc2 <- hclust(d, method = ""ward.D2"")"
+"0","plot(hc2, labels = FALSE, hang = -1, main = ""CAH - Ward"")"

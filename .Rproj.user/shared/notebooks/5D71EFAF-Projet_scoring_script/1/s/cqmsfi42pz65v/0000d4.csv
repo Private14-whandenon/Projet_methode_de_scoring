@@ -1,0 +1,2 @@
+"0","par(mfrow = c(2, 4))"
+"0","for (v in numeric_vars) boxplot(data_new[[v]] ~ data_new$Churn, main = v, xlab = """", ylab = """")"

@@ -1,0 +1,5 @@
+"0","# On utilise les variables retenues par la sélection LDA Backward"
+"0",""
+"0","formule_modele <- as.formula(paste(""Churn ~"", paste(vars_finales, collapse = "" + "")))"
+"2","Erreur : objet 'vars_finales' introuvable
+"

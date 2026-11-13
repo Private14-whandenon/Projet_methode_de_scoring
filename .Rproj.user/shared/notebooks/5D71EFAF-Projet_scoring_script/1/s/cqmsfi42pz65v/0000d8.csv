@@ -1,0 +1,8 @@
+"0",""
+"0","# Correlation des varaibles quantitatives"
+"0","df_num <- data_new[, numeric_vars]"
+"0",""
+"0","mat_pearson  <- cor(df_num, method = ""pearson"", use = ""complete.obs"")"
+"0","mat_spearman <- cor(df_num, method = ""spearman"", use = ""complete.obs"")"
+"0",""
+"0","corrplot(mat_pearson, method = ""color"", type = ""upper"", addCoef.col = ""black"", number.cex = 0.6, title = ""Heatmap de corrélation (pearson)"", mar = c(0,0,1,0))"
