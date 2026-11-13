@@ -1,3 +1,4 @@
+"0","numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))"
 "0",""
-"0","#Commentaire: La correlation de spearman est plus robuste étant donné que nos variables ne suivent pas une distribution normale (cf histogramme et qq_plot) et qu'il y a des valeurs extrêmes. "
-"0",""
+"0","#Boxplots des moyennes des variables quantitatives en fonction du churn"
+"0","aggregate(data_new[, numeric_vars], list(Churn = data_new$Churn), mean)"

@@ -185,32 +185,48 @@ corrplot(mat_cramer,
 ```
 ###L'encodage des variables
 ```{r}
-#L'encodage se fera uniquement sur les variables catégorielles binaires. Les variable catégorielles ordinales seront reconverties en numériques, uniquement pour les algorithmes KNN, K-means et CAH. 
+#Il serait plus approprié de faire d'abord la selection des variables puis d'encoder uniquement les variables binaires/nominales étant donné que après l'encodage ces variables sont subdivisées en plusieurs colonnes binaires (dans notre cas 4 colonnes). Je propose donc de faire un modèle sans encodage sur le K-means et le CAH (avec toutes les variables transformées en numérique). Puis après selction et encodage, on refait un deuxième puis on les compares. 
+
+
+#Les modèles de distances K-means, CAH et KNN necessitent l'encodage des variables qualitatives nominales/binaires. L'encodage se fera donc uniquement sur ces variables. Les variables catégorielles ordinales seront reconverties en numériques, uniquement pour les algorithmes KNN, K-means et CAH. 
 
 numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))
 
 cat_ordinal_vars <- c("Charge..Amount", "Age.Group")
 data_new[cat_ordinal_vars] <- lapply(data_new[cat_ordinal_vars], function(x) as.numeric(as.character(x)))
 
-df_nominales <- data_new[, c("Complains", "Tariff.Plan", "Status")]
+df_binaire <- data_new[, c("Complains", "Tariff.Plan", "Status")]
 
-#Appliquer le One-Hot Encoding
-mat_onehot <- model.matrix(~ . - 1, data = df_nominales)
-# 3. Regrouper avec tes quantitatives et tes ordinales déjà numériques
-df_global <- cbind(
-  data_new[, c(numeric_vars, cat_ordinal_vars)], # Quantitatives + Ordinales numériques
+#Appliquer le One-Hot Encoding sur les variables binaires
+mat_onehot <- model.matrix(~ . - 1, data = df_binaire)
+
+#Créer la table regroupant les variables quantitatives et qualitatives (binaires et ordinales sans la variable cible) à utiliser pour les algorithmes de clusters (K-means et CAH).
+data_cluster <- cbind(
+  data_new[, numeric_vars], # Quantitatives + Ordinales numériques
   mat_onehot                               # Nominales encodées en 0/1
 )
 
-str(df_global)
+str(data_cluster)
+
+#Pour le KNN, il faudra rajouter la variable cible à cette même base de données. Les transformations sur les variables qualitatives restent inchangées. 
+
+data_KNN <- cbind(
+  data_new[, numeric_vars], 
+  mat_onehot                             
+)
+
+data_KNN$Churn <- data_new$Churn
+
+str(data_KNN)
+
+#Pour les autres algorithmes, la base de données data_new sera utilisée directement, selon ce que j'ai compris, ces algorithmes gèrent les variables qualitatives et quantitatives d'eux mêmes en interne et ne necessitent pas d'encodage ni de standardisation.
+
 ```
 
 
 ####  K-means et CAH 
 
 ```{r}
-#Necessite l'encodage des variables qualitatives (binaires, les )
-
 # Etape 2 : k-means et CAH 
 
 library(cluster)
