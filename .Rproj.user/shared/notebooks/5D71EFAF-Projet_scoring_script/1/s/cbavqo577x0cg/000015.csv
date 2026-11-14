@@ -87,7 +87,7 @@
 "
 "1","       0.00 "
 "1","       0.00 "
-"1","       1.35 "
+"1","       1.58 "
 "1","
 "
 "1","
@@ -106,7 +106,7 @@
 "
 "1","    Tariff.Plan + Status + Age
 "
-"1","<environment: 0x00000297ce44e008>
+"1","<environment: 0x0000018f2c4c7870>
 "
 "1","
 "
@@ -182,7 +182,7 @@
 "
 "1","       0.00 "
 "1","       0.00 "
-"1","       3.25 "
+"1","       4.32 "
 "1","
 "
 "1","
@@ -197,7 +197,7 @@
 "1","final model : "
 "1","train_data$Churn ~ Call..Failure + Seconds.of.Use + Frequency.of.SMS
 "
-"1","<environment: 0x00000297c579c150>
+"1","<environment: 0x0000018f3087aa58>
 "
 "1","
 "

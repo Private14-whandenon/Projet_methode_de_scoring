@@ -1,4 +1,8 @@
 "0","#install.packages(""vcd"") # Pour le V de Cramér"
+"2","Registered S3 method overwritten by 'rmarkdown':
+  method         from
+  print.paged_df     
+"
 "0","#install.packages(""grid"")"
 "0",""
 "0","library(readr)"
