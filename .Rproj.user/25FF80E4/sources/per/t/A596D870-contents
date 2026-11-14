@@ -279,7 +279,7 @@ rev(hc2$height)[1:10]
 sub_grp <- cutree(hc2, k = k)
 table(sub_grp)
 aggregate(data_numeric[, colnames(X)], list(Cluster = sub_grp), mean)
-prop.table(table(sub_grp, data$Churn), 1)
+prop.table(table(sub_grp, data_numeric$Churn), 1)
 
 # Comparaison CAH / k-means
 table(CAH = sub_grp, Kmeans = km.out$cluster)
@@ -293,7 +293,7 @@ prop.table(table(km.mixte$cluster, data_numeric$Churn), 1)
 #### Séparation Train/Test et selection de variable par LDA
 
 ```{r}
-###Après la sélection de données à ce stade faire l'encodage des vars qual uniquement pour le KNN. Les autres algorithmes n'en ont pas besoin car leur configuration permet de traiter les données qualitatives sans l'encodage. 
+###Après la sélection de données à ce stade faire l'encodage des vars qual uniquement pour le KNN. Les autres algorithmes n'en ont pas besoin car leur configuration permet de traiter les données qualitatives sans l'encodage avec R. 
 
 ####### Separation train / test (70 % / 30 %) #######
 set.seed(123)
@@ -301,8 +301,8 @@ indices <- createDataPartition(data_new$Churn, p = 0.7, list = FALSE)
 train_data <- data_new[indices, ]
 test_data  <- data_new[-indices, ]
 
-prop.table(table(train_data_new$Churn))
-prop.table(table(test_data_new$Churn))
+prop.table(table(train_data$Churn))
+prop.table(table(test_data$Churn))
 
 # Variables candidates : on retire les 3 variables redondantes (correlation > 0,9)
 vars <- setdiff(names(data_new), c("Churn", "Age.Group", "Frequency.of.use", "Customer.Value"))

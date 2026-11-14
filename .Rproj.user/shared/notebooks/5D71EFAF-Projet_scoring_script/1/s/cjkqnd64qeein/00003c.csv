@@ -1,4 +1,0 @@
-"0","prop.table(table(sub_grp, data$Churn), 1)"
-"2","Erreur dans table(sub_grp, data$Churn) : 
-  tous les arguments doivent avoir la même longueur
-"

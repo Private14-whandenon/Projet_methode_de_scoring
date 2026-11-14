@@ -1,0 +1,4 @@
+"0","numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))"
+"0",""
+"0","#Boxplots des moyennes des variables quantitatives en fonction du churn"
+"0","aggregate(data_new[, numeric_vars], list(Churn = data_new$Churn), mean)"
