@@ -53,18 +53,20 @@ print(paste("Nombre de doublons trouvés :",nb_doublons))
 
 ##Suppression des doublons et création d'un nouveau dataset sans les doublons (j'avais trouvé 300 doublons):
 data_new <- data %>% distinct()
-
+str(data_new)
 
 #Standardisation des noms des variables :
-data_new <- data_new %>%
-rename_with(~ str_replace_all(., "\\s+", "_"))
+names(data_new) <- gsub("\\.+", ".", names(data_new))
+names(data_new)
 
 #On convertit les variables catégorielles (binaires et ordinales) en facteurs
+
 data_new <- data_new %>%
 mutate(
 across(any_of(c("Churn", "Complains", "Status", "Tariff.Plan")), as.factor),
+Churn = factor(Churn, levels = c(0, 1), labels = c("non", "oui")),
 Age.Group=factor(Age.Group, levels = 1:5, ordered=TRUE), 
-Charge..Amount = factor(Charge..Amount, levels = 0:10, ordered = TRUE)
+Charge.Amount = factor(Charge.Amount, levels = 0:10, ordered = TRUE)
 )
 #Vérification
 str(data_new)
@@ -151,7 +153,33 @@ corrplot(mat_spearman, method = "color", type = "upper", addCoef.col = "black", 
 
 #Commentaire: La correlation de spearman est plus robuste étant donné que nos variables ne suivent pas une distribution normale (cf histogramme et qq_plot) et qu'il y a des valeurs extrêmes. 
 
+
 ```
+
+## Correlations entre variables (Spearman)
+```{r}
+# Spearman travaille sur les rangs : adapte aux variables non normales (cf. QQ-plots)
+# et aux variables ordinales. On remet donc toutes les variables explicatives en numerique.
+df_num <- data.frame(lapply(data_new[, names(data_new) != "Churn"],
+                            function(x) as.numeric(as.character(x))))
+
+mat_spearman <- cor(df_num, method = "spearman")
+corrplot(mat_spearman, method = "color", type = "upper", addCoef.col = "black",
+         number.cex = 0.6, tl.col = "black", title = "Correlation de Spearman",
+         mar = c(0, 0, 1, 0))
+
+# Paires tres correlees (|r| > 0,9) : candidates au retrait pour redondance
+idx <- which(abs(mat_spearman) > 0.9 & upper.tri(mat_spearman), arr.ind = TRUE)
+data.frame(var1 = rownames(mat_spearman)[idx[, 1]],
+           var2 = colnames(mat_spearman)[idx[, 2]],
+           spearman = round(mat_spearman[idx], 2))
+
+vars_test <- setdiff(names(df_num), c("Age.Group", "Frequency.of.use"))
+summary(lm(Customer.Value ~ ., data = df_num[, vars_test]))$r.squared
+
+# Customer.Value n’est corrélée à aucune variable au-delà de 0,9 (au maximum 0,78 avec Frequency.of.SMS). En revanche, une régression sur les autres variables explicatives l’explique à 98 % (R² = 0,98, soit un VIF d’environ 53). Cette variable, calculée par l’opérateur, est donc une combinaison des variables d’usage : nous la retirons pour ne pas compter deux fois la même information. »
+```
+
 
 
 ### Variables qualitatives (liaisons entre variables)
@@ -213,9 +241,10 @@ for (qual in categories_vars) {
 
 #Transformation des variables de la base de données en numérique pour l'utilisation de ces algorithmes
 data_numeric <- data_new %>%
-  mutate(across(everything(), as.numeric))
+  mutate(across(-Churn, ~ as.numeric(as.character(.x))))
 
-# Variables utilisees : pas la cible, pas Age.Group (redondante avec Age), ni Frequency.of.use (fortement correlée avec d'autres variables). Je trouve que Custumer Value ne devrait pas être retirer vu qu'il contient un information pertinente. 
+# Customer.Value n’est corrélée à aucune variable au-delà de 0,9 (au maximum 0,78 avec Frequency.of.SMS). En revanche, une régression sur les autres variables explicatives l’explique à 98 % (R² = 0,98, soit un VIF d’environ 53). Cette variable, calculée par l’opérateur, est donc une combinaison des variables d’usage : nous la retirons pour ne pas compter deux fois la même information. 
+
 #création d'une table où toutes les valeurs sont stadardisée par rapport à la moyenne avec scale()
 
 X <- scale(data_numeric[, !(names(data_numeric) %in% c("Churn", "Age.Group", "Frequency.of.use", "Customer.Value"))])
@@ -279,7 +308,7 @@ rev(hc2$height)[1:10]
 sub_grp <- cutree(hc2, k = k)
 table(sub_grp)
 aggregate(data_numeric[, colnames(X)], list(Cluster = sub_grp), mean)
-prop.table(table(sub_grp, data$Churn), 1)
+prop.table(table(sub_grp, data_numeric$Churn), 1)
 
 # Comparaison CAH / k-means
 table(CAH = sub_grp, Kmeans = km.out$cluster)
@@ -297,15 +326,15 @@ prop.table(table(km.mixte$cluster, data_numeric$Churn), 1)
 
 ####### Separation train / test (70 % / 30 %) #######
 set.seed(123)
-indices <- createDataPartition(data_new$Churn, p = 0.7, list = FALSE)
-train_data <- data_new[indices, ]
-test_data  <- data_new[-indices, ]
+indices <- createDataPartition(data_numeric$Churn, p = 0.7, list = FALSE)
+train_data <- data_numeric[indices, ]
+test_data  <- data_numeric[-indices, ]
 
-prop.table(table(train_data_new$Churn))
-prop.table(table(test_data_new$Churn))
+prop.table(table(train_data$Churn))
+prop.table(table(test_data$Churn))
 
-# Variables candidates : on retire les 3 variables redondantes (correlation > 0,9)
-vars <- setdiff(names(data_new), c("Churn", "Age.Group", "Frequency.of.use", "Customer.Value"))
+# Variables candidates : on retire les 3 variables redondantes 
+vars <- setdiff(names(data_numeric), c("Churn", "Age.Group", "Frequency.of.use", "Customer.Value"))
 
 ###### Sélection de variables par LDA ###########
 
@@ -343,45 +372,6 @@ vars_forward
 
 ```
 
-###L'encodage des variables qualitatives 
-```{r}
-#Il serait plus approprié de faire d'abord la selection des variables puis d'encoder uniquement les variables binaires/nominales étant donné que après l'encodage ces variables sont subdivisées en plusieurs colonnes binaires (dans notre cas 4 colonnes). Je propose donc de faire un modèle sans encodage sur le K-means et le CAH (avec toutes les variables transformées en numérique). Puis après selction et encodage, on refait un deuxième puis on les compares. 
-
-
-#Les modèles de distances K-means, CAH et KNN necessitent l'encodage des variables qualitatives nominales/binaires. L'encodage se fera donc uniquement sur ces variables. Les variables catégorielles ordinales seront reconverties en numériques, uniquement pour les algorithmes KNN, K-means et CAH. 
-
-numeric_vars <- names(dplyr::select(data_new, where(is.numeric)))
-
-cat_ordinal_vars <- c("Charge..Amount", "Age.Group")
-data_new[cat_ordinal_vars] <- lapply(data_new[cat_ordinal_vars], function(x) as.numeric(as.character(x)))
-
-df_binaire <- data_new[, c("Complains", "Tariff.Plan", "Status")]
-
-#Appliquer le One-Hot Encoding sur les variables binaires
-mat_onehot <- model.matrix(~ . - 1, data = df_binaire)
-
-#Créer la table regroupant les variables quantitatives et qualitatives (binaires et ordinales sans la variable cible) à utiliser pour les algorithmes de clusters (K-means et CAH).
-data_cluster <- cbind(
-  data_new[, numeric_vars], # Quantitatives + Ordinales numériques
-  mat_onehot                               # Nominales encodées en 0/1
-)
-
-str(data_cluster)
-
-#Pour le KNN, il faudra rajouter la variable cible à cette même base de données. Les transformations sur les variables qualitatives restent inchangées. 
-
-data_KNN <- cbind(
-  data_new[, numeric_vars], 
-  mat_onehot                             
-)
-
-data_KNN$Churn <- data_new$Churn
-
-str(data_KNN)
-
-#Pour les autres algorithmes, la base de données data_new sera utilisée directement, selon ce que j'ai compris, ces algorithmes gèrent les variables qualitatives et quantitatives d'eux mêmes en interne et ne necessitent pas d'encodage ni de standardisation.
-```
-
 
 
 # Partie Modélisation 
@@ -408,15 +398,34 @@ train_scaled <- scale(train_final[, vars_finales])
 test_scaled  <- scale(test_final[, vars_finales], 
                       center = attr(train_scaled, "scaled:center"), 
                       scale = attr(train_scaled, "scaled:scale"))
+library(caret)
 
-# Application du KNN (k=5)
+# Recherche du meilleur k par validation croisée (10 plis) sur le train
+# Critère : AUC (mieux adaptée qu'un taux d'erreur, car 84 % des clients ne partent pas)
 set.seed(123)
-pred_knn <- knn(train = train_scaled, test = test_scaled, cl = train_final$Churn, k = 5)
+fit_knn <- train(train_final[, vars_finales], train_final$Churn,
+                 method = "knn",
+                 metric = "ROC",
+                 preProcess = c("center", "scale"),    # standardisation dans chaque pli
+                 trControl = trainControl(method = "cv", number = 10,
+                                          classProbs = TRUE,
+                                          summaryFunction = twoClassSummary),
+                 tuneGrid = data.frame(k = seq(1, 51, 2)))
+
+fit_knn$bestTune     # le meilleur k
+plot(fit_knn)        # AUC selon k, pour le rapport
+
+meilleur_k <- fit_knn$bestTune$k
+
+
+# Application du KNN (k=7)
+set.seed(123)
+pred_knn <- knn(train = train_scaled, test = test_scaled, cl = train_final$Churn, k =meilleur_k)
 
 # Matrice de confusion et Précision
-table(Predit = pred_knn, Reel = test_final$Churn)
+confusionMatrix(pred_knn, test_final$Churn, positive = "oui")
 accuracy_KNN <- mean(pred_knn == test_final$Churn)
-print(paste("Précision du KNN :", round(accuracy_KNN, 4)))
+print(paste("taux de bon classement :", round(accuracy_KNN, 4)))
 
 ```
 
@@ -426,13 +435,18 @@ library(rpart)
 library(rpart.plot)
 
 # Arbre initial
-model.cart <- rpart(formule_modele, data = train_final)
+model.cart <- rpart(formule_modele, data = train_final, method = "class", cp = 0)
 
 # Elagage (recherche du meilleur cp)
+set.seed(123)
+# metric = "ROC", Avec 84 % de « non », l’accuracy favorise les arbres trop simples
+  
 cv.cart <- train(formule_modele, data = train_final, method = "rpart",
-                 metric = "Accuracy",
-                 trControl = trainControl(method = "cv", number = 10),
-                 tuneGrid = data.frame(cp = seq(0.01, 0.1, length = 20)))
+                  metric = "ROC",
+                  trControl = trainControl(method = "cv", number = 10,
+                  classProbs = TRUE,
+                  summaryFunction = twoClassSummary),
+                  tuneGrid = data.frame(cp = seq(0, 0.05, 0.0025)))
 
 # Elagage avec le meilleur cp
 model.cart_pruned <- prune(model.cart, cp = as.numeric(cv.cart$best))
@@ -440,6 +454,7 @@ rpart.plot(model.cart_pruned)
 
 # Prédiction
 pred.cart <- predict(model.cart_pruned, test_final, type = "class")
+confusionMatrix(pred.cart, test_final$Churn, positive = "oui")
 err_cart <- mean(pred.cart != test_final$Churn)
 cat(sprintf("[CART] Taux d'erreur = %.4f\n", err_cart))
 
@@ -449,9 +464,14 @@ cat(sprintf("[CART] Taux d'erreur = %.4f\n", err_cart))
 ```{r, echo=TRUE}
 library(C50)
 
+# Arbre C5.0 (critère : entropie), un seul arbre (trials = 1 par défaut)
 model_c5 <- C5.0(formule_modele, data = train_final)
+summary(model_c5)      # taille de l'arbre et usage des variables
+plot(model_c5)
 
+# Prédiction et évaluation sur le test
 pred_c5 <- predict(model_c5, newdata = test_final)
+confusionMatrix(pred_c5, test_final$Churn, positive = "oui")
 err_c5  <- mean(pred_c5 != test_final$Churn)
 cat(sprintf("[C5.0] Taux d'erreur = %.4f\n", err_c5))
 
@@ -478,20 +498,38 @@ plot(model_chaid,
 
 # Prédiction
 pred_chaid <- predict(model_chaid, newdata = test_final, type = "response")
+confusionMatrix(pred_chaid, test_final$Churn, positive = "oui")
 err_chaid  <- mean(pred_chaid != test_final$Churn)
 cat(sprintf("[CHAID] Taux d'erreur = %.4f\n", err_chaid))
 ```
 
 ## Forêt Aléatoire (Random Forest)
 ```{r, echo=TRUE}
+# Choix de mtry (nombre de variables tirées à chaque coupe) par validation croisée, critère AUC
+set.seed(123)
+cv.rf <- train(formule_modele, data = train_final, method = "rf",
+                metric = "ROC", ntree = 500,
+                trControl = trainControl(method = "cv", number = 10,
+                classProbs = TRUE,
+                summaryFunction = twoClassSummary),
+               tuneGrid = data.frame(mtry = 1:length(vars_finales)))
+cv.rf$best
+plot(cv.rf)
+# mtry=2
+
 # Entraînement
-rf_model <- randomForest(formule_modele, data = train_final, ntree = 100)
+rf_model <- randomForest(formule_modele, data = train_final, ntree =500,mtry=cv.rf$best$mtry)
+rf_model 
+plot(rf_model)            
+varImpPlot(rf_model, main = "Importance des variables")
+
 
 # Prédiction
 rf_predictions <- predict(rf_model, test_final)
 
 # Matrice de confusion
-conf_matrix_rf <- confusionMatrix(rf_predictions, test_final$Churn)
+conf_matrix_rf <- confusionMatrix(rf_predictions, test_final$Churn, positive = "oui")
+conf_matrix_rf
 error_rate_rf <- 1 - conf_matrix_rf$overall["Accuracy"]
 
 print(paste("Taux d'erreur Random Forest :", round(error_rate_rf, 4)))
@@ -500,12 +538,19 @@ print(paste("Taux d'erreur Random Forest :", round(error_rate_rf, 4)))
 ## Boosting (GBM )
 ```{r, echo=TRUE}
 library(caret)
-set.seed(123)
-ctrl_gbm <- trainControl(method = "cv", number = 5)
-model_gbm <- train(formule_modele, data = train_final, method = "gbm", 
-                   trControl = ctrl_gbm, verbose = FALSE)
 
+set.seed(123)
+ctrl_gbm <- trainControl(method = "cv", number = 10,classProbs = TRUE,
+                                      summaryFunction = twoClassSummary)
+model_gbm <- train(formule_modele, data = train_final, method = "gbm", metric = "ROC",
+                                 trControl = ctrl_gbm, verbose = FALSE)
+model_gbm$best
+plot(model_gbm)
+summary(model_gbm$finalModel)
+
+# Prédiction 
 pred_gbm <- predict(model_gbm, test_final)
+confusionMatrix(pred_gbm, test_final$Churn, positive = "oui")
 err_gbm <- mean(pred_gbm != test_final$Churn)
 cat(sprintf("[Boosting GBM] Taux d'erreur = %.4f\n", err_gbm))
 
@@ -513,12 +558,20 @@ cat(sprintf("[Boosting GBM] Taux d'erreur = %.4f\n", err_gbm))
 ## Régression Logistique
 ```{r, echo=TRUE}
 model_glm <- glm(formule_modele, data = train_final, family = "binomial")
+summary(model_glm)
+
+# Odds ratios et intervalles de confiance à 95 %(l'effet de chaque variable sur la cote du churn)
+round(cbind(OR = exp(coef(model_glm)), exp(confint.default(model_glm))), 3)
+
+# Qualité du modèle : AIC, et test du rapport de vraisemblance contre le modèle sans variable
+AIC(model_glm)
+modele_nul <- glm(Churn ~ 1, data = train_final, family = "binomial")
+anova(modele_nul, model_glm, test = "Chisq")
 
 # Prédiction (probabilité, puis classe avec seuil 0.5)
 prob_glm <- predict(model_glm, test_final, type = "response")
-pred_glm <- ifelse(prob_glm > 0.5, "oui", "non") 
-pred_glm <- as.factor(pred_glm)
-
+pred_glm <- factor(ifelse(prob_glm > 0.5, "oui", "non"), levels = c("non", "oui"))
+confusionMatrix(pred_glm, test_final$Churn, positive = "oui")
 err_glm <- mean(pred_glm != test_final$Churn)
 cat(sprintf("[Régression Logistique] Taux d'erreur = %.4f\n", err_glm))
 
@@ -526,8 +579,11 @@ cat(sprintf("[Régression Logistique] Taux d'erreur = %.4f\n", err_glm))
 ## Analyse Discriminante (LDA)
 ```{r, echo=TRUE}
 lda_model <- lda(formule_modele, data = train_final)
+lda_model
 
+# Prédiction 
 pred_lda <- predict(lda_model, newdata = test_final)$class
+confusionMatrix(pred_lda, test_final$Churn, positive = "oui")
 err_lda  <- mean(pred_lda != test_final$Churn)
 cat(sprintf("[LDA] Taux d'erreur = %.4f\n", err_lda))
 
@@ -535,12 +591,19 @@ cat(sprintf("[LDA] Taux d'erreur = %.4f\n", err_lda))
 
 # Comparaison des modèles 
 ```{r, echo=TRUE}
+
+# Sensibilité : part des clients partis que le modèle détecte
+sensibilite <- function(pred) mean(pred[test_final$Churn == "oui"] == "oui")
+
 # On rassemble les taux d'erreur
 
 resultats <- data.frame(
   Algorithme = c("KNN", "CART", "C5.0", "CHAID", "Random Forest", "Boosting", "Logistique", "LDA"),
-  Taux_Erreur = c(1 - accuracy_KNN, err_cart, err_c5, err_chaid, error_rate_rf, err_gbm, err_glm, err_lda)
-)
+  Taux_Erreur = c(1 - accuracy_KNN, err_cart, err_c5, err_chaid, error_rate_rf, err_gbm, err_glm, err_lda),
+
+Sensibilite = c(sensibilite(pred_knn), sensibilite(pred.cart), sensibilite(pred_c5),
+                  sensibilite(pred_chaid), sensibilite(rf_predictions), sensibilite(pred_gbm),
+                  sensibilite(pred_glm), sensibilite(pred_lda)))
 
 # on ressort le meilleur (erreur la plus basse)
 resultats <- resultats[order(resultats$Taux_Erreur), ]
@@ -551,5 +614,10 @@ barplot(resultats$Taux_Erreur, names.arg = resultats$Algorithme,
         col = "skyblue", main = "Comparaison des taux d'erreur", 
         ylab = "Taux d'erreur", las = 2)
 
+barplot(resultats$Sensibilite, names.arg = resultats$Algorithme, col = "skyblue",
+        main = "Sensibilité des modèles", ylab = "Sensibilité", las = 2, ylim = c(0, 1))
+
 ```
+
+
 
