@@ -63,7 +63,7 @@ names(data_new)
 
 data_new <- data_new %>%
 mutate(
-across(any_of(c("Churn", "Complains", "Status", "Tariff.Plan")), as.factor),
+across(any_of(c("Complains", "Status", "Tariff.Plan")), as.factor),
 Churn = factor(Churn, levels = c(0, 1), labels = c("non", "oui")),
 Age.Group=factor(Age.Group, levels = 1:5, ordered=TRUE), 
 Charge.Amount = factor(Charge.Amount, levels = 0:10, ordered = TRUE)
@@ -177,7 +177,7 @@ data.frame(var1 = rownames(mat_spearman)[idx[, 1]],
 vars_test <- setdiff(names(df_num), c("Age.Group", "Frequency.of.use"))
 summary(lm(Customer.Value ~ ., data = df_num[, vars_test]))$r.squared
 
-# Customer.Value n’est corrélée à aucune variable au-delà de 0,9 (au maximum 0,78 avec Frequency.of.SMS). En revanche, une régression sur les autres variables explicatives l’explique à 98 % (R² = 0,98, soit un VIF d’environ 53). Cette variable, calculée par l’opérateur, est donc une combinaison des variables d’usage : nous la retirons pour ne pas compter deux fois la même information. »
+# Customer.Value n’est corrélée à aucune variable au-delà de 0,9 (au maximum 0,78 avec Frequency.of.SMS). En revanche, une régression sur les autres variables explicatives l’explique à 98 % (R² = 0,98, soit un VIF d’environ 53). Cette variable, calculée par l’opérateur, est donc une combinaison des variables d’usage : nous la retirons pour ne pas compter deux fois la même information. 
 ```
 
 
@@ -244,6 +244,8 @@ data_numeric <- data_new %>%
   mutate(across(-Churn, ~ as.numeric(as.character(.x))))
 
 # Customer.Value n’est corrélée à aucune variable au-delà de 0,9 (au maximum 0,78 avec Frequency.of.SMS). En revanche, une régression sur les autres variables explicatives l’explique à 98 % (R² = 0,98, soit un VIF d’environ 53). Cette variable, calculée par l’opérateur, est donc une combinaison des variables d’usage : nous la retirons pour ne pas compter deux fois la même information. 
+
+# On retire Churn (méthode non supervisée) et les variables redondantes : Age.Group (Spearman = 1 avec Age), Frequency.of.use (0,93 avec Seconds.of.Use) 
 
 #création d'une table où toutes les valeurs sont stadardisée par rapport à la moyenne avec scale()
 
@@ -322,7 +324,6 @@ prop.table(table(km.mixte$cluster, data_numeric$Churn), 1)
 #### Séparation Train/Test et selection de variable par LDA
 
 ```{r}
-###Après la sélection de données à ce stade faire l'encodage des vars qual uniquement pour le KNN. Les autres algorithmes n'en ont pas besoin car leur configuration permet de traiter les données qualitatives sans l'encodage avec R. 
 
 ####### Separation train / test (70 % / 30 %) #######
 set.seed(123)
@@ -518,6 +519,7 @@ plot(cv.rf)
 # mtry=2
 
 # Entraînement
+set.seed(123)
 rf_model <- randomForest(formule_modele, data = train_final, ntree =500,mtry=cv.rf$best$mtry)
 rf_model 
 plot(rf_model)            
