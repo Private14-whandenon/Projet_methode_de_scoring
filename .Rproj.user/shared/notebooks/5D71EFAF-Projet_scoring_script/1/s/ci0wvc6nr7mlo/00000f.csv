@@ -1,7 +1,22 @@
-"0","install.packages(""grid"")
+"0","#install.packages(""vcd"") # Pour le V de Cramér"
+"2","Registered S3 method overwritten by 'rmarkdown':
+  method         from
+  print.paged_df     
 "
-"2","G2;WARNING: Rtools is required to build R packages but is not currently installed. Please download and install the appropriate version of Rtools before proceeding:
-
-https://cran.rstudio.com/bin/windows/Rtools/g
-"
+"0","#install.packages(""grid"")"
 "0",""
+"0","library(readr)"
+"0","library(MASS)"
+"0","library(tidyverse)"
+"0","library(dplyr)"
+"0","library(stringr)"
+"0","library(ggplot2)"
+"0","library(cluster)    "
+"0","library(factoextra) "
+"0","library(dendextend) "
+"0","library(corrplot)"
+"0","library(caret)"
+"0","library(klaR)"
+"0","library(randomForest)"
+"0","library(vcd)"
+"0","library(tidyr)"
