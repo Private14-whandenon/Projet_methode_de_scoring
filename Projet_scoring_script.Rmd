@@ -156,31 +156,6 @@ corrplot(mat_spearman, method = "color", type = "upper", addCoef.col = "black", 
 
 ```
 
-## Correlations entre variables (Spearman)
-```{r}
-# Spearman travaille sur les rangs : adapte aux variables non normales (cf. QQ-plots)
-# et aux variables ordinales. On remet donc toutes les variables explicatives en numerique.
-df_num <- data.frame(lapply(data_new[, names(data_new) != "Churn"],
-                            function(x) as.numeric(as.character(x))))
-
-mat_spearman <- cor(df_num, method = "spearman")
-corrplot(mat_spearman, method = "color", type = "upper", addCoef.col = "black",
-         number.cex = 0.6, tl.col = "black", title = "Correlation de Spearman",
-         mar = c(0, 0, 1, 0))
-
-# Paires tres correlees (|r| > 0,9) : candidates au retrait pour redondance
-idx <- which(abs(mat_spearman) > 0.9 & upper.tri(mat_spearman), arr.ind = TRUE)
-data.frame(var1 = rownames(mat_spearman)[idx[, 1]],
-           var2 = colnames(mat_spearman)[idx[, 2]],
-           spearman = round(mat_spearman[idx], 2))
-
-vars_test <- setdiff(names(df_num), c("Age.Group", "Frequency.of.use"))
-summary(lm(Customer.Value ~ ., data = df_num[, vars_test]))$r.squared
-
-# Customer.Value n’est corrélée à aucune variable au-delà de 0,9 (au maximum 0,78 avec Frequency.of.SMS). En revanche, une régression sur les autres variables explicatives l’explique à 98 % (R² = 0,98, soit un VIF d’environ 53). Cette variable, calculée par l’opérateur, est donc une combinaison des variables d’usage : nous la retirons pour ne pas compter deux fois la même information. 
-```
-
-
 
 ### Variables qualitatives (liaisons entre variables)
 ```{r}
@@ -213,6 +188,9 @@ corrplot(mat_cramer,
          title = "Matrice du V de Cramér (liaisons entre variables qualitatives)",
          mar = c(0, 0, 2, 0))
 ```
+
+
+
 ###Analyse des liens entre variables quantitatives et qualitatives
 ```{r}
 for (qual in categories_vars) {
@@ -230,11 +208,36 @@ for (qual in categories_vars) {
           legend.position = "none")
   
   print(p)
-}  
-
+}
 ```
 
-####  K-means et CAH 
+## Correlations entre variables (Spearman)
+
+```{r}
+# Spearman travaille sur les rangs : adapte aux variables non normales (cf. QQ-plots)
+# et aux variables ordinales. On remet donc toutes les variables explicatives en numerique.
+df_num <- data.frame(lapply(data_new[, names(data_new) != "Churn"],
+                            function(x) as.numeric(as.character(x))))
+
+mat_spearman <- cor(df_num, method = "spearman")
+corrplot(mat_spearman, method = "color", type = "upper", addCoef.col = "black",
+         number.cex = 0.6, tl.col = "black", title = "Correlation de Spearman",
+         mar = c(0, 0, 1, 0))
+
+# Paires tres correlees (|r| > 0,9) : candidates au retrait pour redondance
+idx <- which(abs(mat_spearman) > 0.9 & upper.tri(mat_spearman), arr.ind = TRUE)
+data.frame(var1 = rownames(mat_spearman)[idx[, 1]],
+           var2 = colnames(mat_spearman)[idx[, 2]],
+           spearman = round(mat_spearman[idx], 2))
+
+vars_test <- setdiff(names(df_num), c("Age.Group", "Frequency.of.use"))
+summary(lm(Customer.Value ~ ., data = df_num[, vars_test]))$r.squared
+
+# Customer.Value n’est corrélée à aucune variable au-delà de 0,9 (au maximum 0,78 avec Frequency.of.SMS). En revanche, une régression sur les autres variables explicatives l’explique à 98 % (R² = 0,98, soit un VIF d’environ 53). Cette variable, calculée par l’opérateur, est donc une combinaison des variables d’usage : nous la retirons pour ne pas compter deux fois la même information. 
+```
+
+####  K-means et CAH
+
 
 ```{r}
 # Etape 2 : k-means et CAH 
